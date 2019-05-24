@@ -217,14 +217,14 @@ public class MongoQueryUtil
 				value = convertSQLLikeCharacterToRegex(value);
 
 				Pattern pattern;
-				if (GenerateStatementOption.METHOD_LOWER_CASE.equals(queryRequest.getInExampleOption().getMethod())
-						|| GenerateStatementOption.METHOD_UPPER_CASE.equals(queryRequest.getInExampleOption().getMethod())) {
+				if (GenerateStatementOption.METHOD_LOWER_CASE.equals(queryRequest.getLikeExampleOption().getMethod())
+						|| GenerateStatementOption.METHOD_UPPER_CASE.equals(queryRequest.getLikeExampleOption().getMethod())) {
 					pattern = Pattern.compile(value, Pattern.CASE_INSENSITIVE);
 				} else {
 					pattern = Pattern.compile(value);
 				}
 
-				if (GenerateStatementOption.CONDITION_OR.equals(queryRequest.getInExampleOption().getCondition())) {
+				if (GenerateStatementOption.CONDITION_OR.equals(queryRequest.getLikeExampleOption().getCondition())) {
 					query = Filters.or(query, Filters.regex(fieldName, pattern));
 				} else {
 					query = Filters.and(query, Filters.regex(fieldName, pattern));
@@ -261,6 +261,11 @@ public class MongoQueryUtil
 
 	public String convertSQLLikeCharacterToRegex(String value)
 	{
+		if (value == null) {
+			value = "";
+		}
+		value = value.replace("\\", "");
+
 		//deterime starts with (a% = ^a), endwith (%a = a$) and contains (a)
 		if (value.startsWith(LIKE_QUERY_CHARACTER) && value.endsWith(LIKE_QUERY_CHARACTER)) {
 			value = value.replace(LIKE_QUERY_CHARACTER, "");
@@ -425,6 +430,10 @@ public class MongoQueryUtil
 
 					Object value = field.get(example);
 					if (value != null) {
+						if (value instanceof Enum<?>) {
+							value = value.toString();
+						}
+
 						GenerateStatementOption fieldOperation = generateStatementOption;
 						if (fieldOptions != null && fieldOptions.containsKey(field.toString())) {
 							fieldOperation = fieldOptions.get(field.toString());
@@ -458,20 +467,23 @@ public class MongoQueryUtil
 
 		if (userContext != null && !userContext.isSystemUser()) {
 
+			Bson queryDataSource;
 			if (userContext.allowUnspecifiedDataSources()) {
-				query = Filters.and(query, Filters.eq(Component.FIELD_DATA_SOURCE, null));
+				queryDataSource = Filters.eq(Component.FIELD_DATA_SOURCE, null);
 			} else {
-				query = Filters.and(query, Filters.ne(Component.FIELD_DATA_SOURCE, null));
+				queryDataSource = Filters.ne(Component.FIELD_DATA_SOURCE, null);
 			}
 
 			Set<String> datasources = userContext.dataSources();
 			if (!datasources.isEmpty()) {
 				if (userContext.allowUnspecifiedDataSources()) {
-					query = Filters.or(query, Filters.in(Component.FIELD_DATA_SOURCE, datasources));
+					queryDataSource = Filters.or(queryDataSource, Filters.in(Component.FIELD_DATA_SOURCE, datasources));
 				} else {
-					query = Filters.and(query, Filters.in(Component.FIELD_DATA_SOURCE, datasources));
+					queryDataSource = Filters.and(queryDataSource, Filters.in(Component.FIELD_DATA_SOURCE, datasources));
 				}
 			}
+			query = Filters.and(query, queryDataSource);
+
 		}
 		return query;
 	}
